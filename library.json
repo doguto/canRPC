@@ -1,0 +1,12 @@
+{
+  "name": "CanRpc",
+  "version": "0.1.0",
+  "description": "Typed RPC over Classic CAN for Mbed OS",
+  "keywords": "can, rpc, mbed",
+  "frameworks": "mbed",
+  "build": {
+    "srcDir": "include",
+    "includeDir": "include",
+    "srcFilter": ["-<*>"]
+  }
+}
