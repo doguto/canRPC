@@ -1,3 +1,5 @@
 build/
 .pio/
 .vscode/
+
+bash.exe.stackdump

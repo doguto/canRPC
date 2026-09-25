@@ -37,14 +37,21 @@ Mbed OS 上の Classic CAN で、型付き payload の RPC (Request / Response) 
 
 ```cpp
 CanRpcClient(CanInterface&, EventQueue&, ClientConfig{request_id, response_id, timeout, max_retries, initial_seq});
-Status call(const RequestPayload&);
+Future<ResponsePayload> call(const RequestPayload&);
+Result<ResponsePayload> await(Future<ResponsePayload>);  // call().await() でも可
+
+Status call_async(const RequestPayload&);
 void set_response_callback(Callback<void(const ResponsePayload&)>);
 void set_error_callback(Callback<void(Error)>);
 ```
 
-- `call()` は送信のみを行う。結果は callback で通知する
-- `call()` の同期戻り値: `Ok` / `Busy` (実行中の call あり) / `SendFailed`
-- `Error`: `Timeout` / `SendFailed` (再送時の送信失敗)
+- `call()` は任意のスレッドから呼べる。送信は `EventQueue` に投入され、dispatch コンテキストで行われる
+- `await()` は完了までブロックし `Result` を返す。完了後は何度呼んでも同じ結果を返す
+- `Result`: `ok()` / `value()` / `error()`。`Error`: `Timeout` / `SendFailed` / `Busy` / `QueueFull` / `Cancelled`
+  - `Busy`: 実行中の call あり。`QueueFull`: `EventQueue` に投入できなかった。`Cancelled`: 完了前に client が破棄された
+- `call_async()` は dispatch コンテキスト用。送信のみを行い、結果は callback で通知する
+  - 同期戻り値: `Ok` / `Busy` (実行中の call あり) / `SendFailed`
+  - `call()` の結果は Future と callback の両方に通知される
 
 ## Server API
 
@@ -67,7 +74,8 @@ void set_request_handler(Callback<ResponsePayload(const RequestPayload&)>);
 
 ## スレッド規約
 
-- `call()` と全ての callback は `EventQueue` の dispatch コンテキストで実行する
+- `call_async()` と全ての callback は `EventQueue` の dispatch コンテキストで実行する
+- `call()` は dispatch スレッド以外から呼ぶ。dispatch スレッド上で `await()` するとデッドロックする
 - インスタンスの破棄は `EventQueue` が停止している (または保留イベントが無い) 状態で行う
 
 ## 既知の制限

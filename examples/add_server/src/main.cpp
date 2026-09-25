@@ -4,14 +4,16 @@
 #include "can_rpc/mbed_can_interface.hpp"
 #include "add_payload.hpp"
 
-#define CAN_RD_PIN PB_8
-#define CAN_TD_PIN PB_9
+// NUCLEO-F303K8: D10=PA_11(RD) / D2=PA_12(TD)
+#define CAN_RD_PIN PA_11
+#define CAN_TD_PIN PA_12
+#define EVENT_QUEUE_SIZE (2 * 1024)  // RAM 16KB のため縮小
 #define CAN_BITRATE 1000000
 
 // === グローバルオブジェクト ===
 Step::CAN can(CAN_RD_PIN, CAN_TD_PIN, CAN_BITRATE);
 can_rpc::MbedCanInterface<Step::CAN> can_interface(can);
-events::EventQueue queue(4 * 1024);
+events::EventQueue queue(EVENT_QUEUE_SIZE);
 can_rpc::CanRpcServer<AddRequest, AddResponse> add_server(
     can_interface,
     queue,

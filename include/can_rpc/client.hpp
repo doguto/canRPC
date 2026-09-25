@@ -3,9 +3,11 @@
 #include <stdint.h>
 #include <string.h>
 
+#include <memory>
 #include <type_traits>
 
 #include "can_interface.hpp"
+#include "future.hpp"
 #include "platform.hpp"
 #include "types.hpp"
 
@@ -13,7 +15,10 @@ namespace can_rpc {
 
 // RPC クライアント。
 //
-// スレッド規約: call() と全ての callback は EventQueue の dispatch コンテキストで実行すること。
+// スレッド規約:
+// - call() は dispatch スレッド以外の任意のスレッドから呼び、await() でブロックして結果を得る。
+//   dispatch スレッド上で await() するとデッドロックする。
+// - call_async() と全ての callback は EventQueue の dispatch コンテキストで実行すること。
 // 受信 ISR からは EventQueue への投入のみ行うため、内部状態は dispatch コンテキストだけが更新する。
 // 破棄は EventQueue が停止している (または保留イベントが無い) 状態で行うこと。
 template <typename RequestPayload, typename ResponsePayload>
@@ -28,6 +33,7 @@ class CanRpcClient {
 public:
     using ResponseCallback = Callback<void(const ResponsePayload&)>;
     using ErrorCallback = Callback<void(Error)>;
+    using ResponseFuture = Future<ResponsePayload>;
 
     CanRpcClient(CanInterface& can, EventQueue& queue, const ClientConfig& config)
         : can_(can), queue_(queue), config_(config), next_seq_(config.initial_seq) {
@@ -39,13 +45,27 @@ public:
             can_.detach(rx_handle_);
         }
         cancel_timeout();
+        resolve(Result<ResponsePayload>::failure(Error::Cancelled));
     }
 
     CanRpcClient(const CanRpcClient&) = delete;
     CanRpcClient& operator=(const CanRpcClient&) = delete;
 
+    // リクエストを送信し、結果を受け取る Future を返す。任意のスレッドから呼べる。
+    //   const auto result = await(client.call(req));
+    // 実行中の call がある場合は Error::Busy、EventQueue が満杯の場合は Error::QueueFull で完了する。
+    ResponseFuture call(const RequestPayload& payload) {
+        auto state = std::make_shared<detail::SharedState<ResponsePayload>>();
+        const int event_id = queue_.call([this, payload, state]() { begin(payload, state); });
+        if (event_id == 0) {
+            state->set(Result<ResponsePayload>::failure(Error::QueueFull));
+        }
+        return ResponseFuture(state);
+    }
+
     // リクエストを送信する。結果は response / error callback で通知される。
-    Status call(const RequestPayload& payload) {
+    // dispatch コンテキストから呼ぶこと。
+    Status call_async(const RequestPayload& payload) {
         if (busy_) {
             return Status::Busy;
         }
@@ -71,6 +91,31 @@ public:
     void set_error_callback(ErrorCallback cb) { error_cb_ = cb; }
 
 private:
+    using State = std::shared_ptr<detail::SharedState<ResponsePayload>>;
+
+    // dispatch コンテキスト: call() から投入された送信要求を処理する
+    void begin(const RequestPayload& payload, const State& state) {
+        if (busy_) {
+            state->set(Result<ResponsePayload>::failure(Error::Busy));
+            return;
+        }
+        if (call_async(payload) != Status::Ok) {
+            state->set(Result<ResponsePayload>::failure(Error::SendFailed));
+            return;
+        }
+        waiter_ = state;
+    }
+
+    // call() の待ち受けを完了させる。callback 内から call() が再入しても影響しないよう先に取り出す。
+    void resolve(const Result<ResponsePayload>& result) {
+        if (!waiter_) {
+            return;
+        }
+        State waiter = std::move(waiter_);
+        waiter_.reset();
+        waiter->set(result);
+    }
+
     // ISR コンテキスト: ID の一致確認とキューへの投入のみ行う
     void on_rx(const CanFrame& frame) {
         if (frame.id != config_.response_id) {
@@ -89,6 +134,7 @@ private:
 
         ResponsePayload response;
         memcpy(&response, &frame.data[1], sizeof(ResponsePayload));
+        resolve(Result<ResponsePayload>::success(response));
         if (response_cb_) {
             response_cb_(response);
         }
@@ -113,9 +159,10 @@ private:
         arm_timeout();
     }
 
-    // busy_ を解除してから通知する。callback 内から call() を再度呼べる。
+    // busy_ を解除してから通知する。callback 内から call_async() を再度呼べる。
     void fail(Error error) {
         busy_ = false;
+        resolve(Result<ResponsePayload>::failure(error));
         if (error_cb_) {
             error_cb_(error);
         }
@@ -140,6 +187,7 @@ private:
 
     ResponseCallback response_cb_;
     ErrorCallback error_cb_;
+    State waiter_;  // 実行中の call() の Future と共有する状態 (dispatch コンテキストのみ更新)
 
     size_t rx_handle_ = CanInterface::kInvalidHandle;
     bool busy_ = false;

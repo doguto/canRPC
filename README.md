@@ -20,24 +20,30 @@ events::EventQueue queue(4 * 1024);
 // client
 can_rpc::CanRpcClient<AddRequest, AddResponse> client(
     can_interface, queue, can_rpc::ClientConfig{0x300, 0x301, 100ms, 3});
-client.set_response_callback([](const AddResponse& r) { /* ... */ });
-client.set_error_callback([](can_rpc::Error e) { /* ... */ });
-client.call(AddRequest{1, 2});  // EventQueue の dispatch コンテキストから呼ぶ
 
 // server
 can_rpc::CanRpcServer<AddRequest, AddResponse> server(
     can_interface, queue, can_rpc::ServerConfig{0x300, 0x301});
 server.set_request_handler([](const AddRequest& r) { return AddResponse{r.a + r.b}; });
 
-queue.dispatch_forever();
+// dispatch は専用スレッドで回す
+Thread dispatch_thread;
+dispatch_thread.start([]() { queue.dispatch_forever(); });
+
+// 別スレッド (main など) から await 風に呼ぶ
+const can_rpc::Result<AddResponse> result = await(client.call(AddRequest{1, 2}));
+if (result) { /* result.value().sum */ } else { /* result.error() */ }
 ```
+
+`call()` は `Future` を返し、`await()` が完了までブロックする。dispatch スレッド上で `await()` するとデッドロックするため、必ず別スレッドから呼ぶ。
+dispatch コンテキスト内で完結させたい場合は callback 方式の `call_async()` + `set_response_callback()` / `set_error_callback()` を使う。
 
 ## ディレクトリ
 
 | パス | 内容 |
 |---|---|
 | `include/can_rpc/` | ライブラリ本体 |
-| `examples/add_client`, `examples/add_server` | Add(a, b) のサンプル (nucleo_f446re) |
+| `examples/add_client`, `examples/add_server` | Add(a, b) のサンプル (nucleo_f303k8) |
 | `host_test/` | ホスト (PC) 上のテスト。CMake + MSVC / GCC |
 
 ## ホストテスト
@@ -50,12 +56,13 @@ build/host/Debug/can_rpc_host_test
 
 ## サンプルのビルド
 
-`Step::CAN` を使用するため、環境変数 `ROBOSTEP_LIBS_CPP` に robostep-libs-cpp のパスを設定する。
+`Step::CAN` を使用するため、robostep-libs-cpp (private) を `lib_deps` で `.pio/libdeps` に取得する。GitHub に SSH 鍵で接続できること。
 
 ```
-set ROBOSTEP_LIBS_CPP=C:/path/to/nhk-r1/libs/robostep-libs-cpp
 cd examples/add_client && pio run
 cd examples/add_server && pio run
 ```
 
-2 枚の NUCLEO-F446RE を CAN トランシーバ経由で接続し、それぞれに client / server を書き込む。
+F303K8 の CAN は D10=PA_11 (RD) / D2=PA_12 (TD)。
+
+2 枚の NUCLEO-F303K8 を CAN トランシーバ経由で接続し、それぞれに client / server を書き込む。
