@@ -2,6 +2,7 @@
 
 #include <stdint.h>
 #include <stdio.h>
+#include <string.h>
 
 #include <chrono>
 #include <vector>
@@ -286,6 +287,33 @@ void test_server_without_handler_stays_silent() {
     CHECK(can.sent.empty());
 }
 
+void test_server_handler_in_constructor() {
+    host::MockBus bus;
+    host::MockCan can{bus};
+    host::EventQueue queue;
+    Server server(can, queue, ServerConfig{kRequestId, kResponseId},
+                  [](const AddRequest& req) { return AddResponse{static_cast<int32_t>(req.a) * req.b}; });
+    CanFrame req = make_frame(kRequestId, 5, 7);
+    const AddRequest payload{3, 4};
+    memcpy(&req.data[1], &payload, sizeof(payload));
+    can.receive(req);
+    queue.run_ready();
+    CHECK(can.sent.size() == 1);
+    AddResponse res{};
+    if (!can.sent.empty()) {
+        memcpy(&res, &can.sent[0].data[1], sizeof(res));
+        CHECK(can.sent[0].id == kResponseId && can.sent[0].data[0] == 7);
+    }
+    CHECK(res.sum == 12);
+}
+
+void test_client_config_defaults() {
+    const ClientConfig config{kRequestId, kResponseId};
+    CHECK(config.timeout == 100ms);
+    CHECK(config.max_retries == 3);
+    CHECK(config.initial_seq == 0);
+}
+
 void test_destructor_detaches() {
     host::MockBus bus;
     host::MockCan can{bus};
@@ -415,6 +443,8 @@ int main() {
     test_sequence_wraps();
     test_server_ignores_malformed_request();
     test_server_without_handler_stays_silent();
+    test_server_handler_in_constructor();
+    test_client_config_defaults();
     test_destructor_detaches();
     test_future_success();
     test_future_sequential_calls();

@@ -8,35 +8,33 @@ Mbed OS 上の Classic CAN で、型付き payload の RPC を行うヘッダオ
 
 ```cpp
 #include "can_rpc/can_rpc.hpp"
-#include "can_rpc/mbed_can_interface.hpp"
 
 struct AddRequest  { int16_t a; int16_t b; };
 struct AddResponse { int32_t sum; };
 
-Step::CAN can(PB_8, PB_9, 1000000);
-can_rpc::MbedCanInterface<Step::CAN> can_interface(can);
-events::EventQueue queue(4 * 1024);
+// CAN・EventQueue・dispatch スレッドをまとめて用意する
+can_rpc::Node node(PB_8, PB_9, 1000000);  // rd, td, bitrate
 
-// client
-can_rpc::CanRpcClient<AddRequest, AddResponse> client(
-    can_interface, queue, can_rpc::ClientConfig{0x300, 0x301, 100ms, 3});
+// client (timeout / retries は省略時 100ms / 3 回)
+auto client = node.client<AddRequest, AddResponse>(0x300, 0x301);
 
-// server
-can_rpc::CanRpcServer<AddRequest, AddResponse> server(
-    can_interface, queue, can_rpc::ServerConfig{0x300, 0x301});
-server.set_request_handler([](const AddRequest& r) { return AddResponse{r.a + r.b}; });
+// server (handler は Node の dispatch スレッドで実行される)
+auto server = node.server<AddRequest, AddResponse>(0x300, 0x301, [](const AddRequest& r) {
+    return AddResponse{r.a + r.b};
+});
 
-// dispatch は専用スレッドで回す
-Thread dispatch_thread;
-dispatch_thread.start([]() { queue.dispatch_forever(); });
-
-// 別スレッド (main など) から await 風に呼ぶ
-const can_rpc::Result<AddResponse> result = await(client.call(AddRequest{1, 2}));
-if (result) { /* result.value().sum */ } else { /* result.error() */ }
+int main() {
+    // main など dispatch スレッド以外から await 風に呼ぶ
+    const can_rpc::Result<AddResponse> result = await(client.call(AddRequest{1, 2}));
+    if (result) { /* result.value().sum */ } else { /* result.error() */ }
+}
 ```
 
-`call()` は `Future` を返し、`await()` が完了までブロックする。dispatch スレッド上で `await()` するとデッドロックするため、必ず別スレッドから呼ぶ。
-dispatch コンテキスト内で完結させたい場合は callback 方式の `call_async()` + `set_response_callback()` / `set_error_callback()` を使う。
+- `Node` は生成時に dispatch スレッドを起動する。EventQueue とスレッドの stack は `Node` 内に静的に確保されるため、グローバルに置けば RAM 使用量はリンク時に確定する
+- サイズを変える場合は `can_rpc::BasicNode<QueueSize, StackSize, MaxHandlers>` を使う (既定 1024 / 1536 / 4)
+- `node.client()` / `node.server()` の戻り値はそのまま変数に受ける (C++17 が必要)
+- `call()` の `await()` は dispatch スレッド上 (callback / handler 内) で呼ぶとデッドロックする。その場合は callback 方式の `call_async()` + `set_response_callback()` / `set_error_callback()` を使う
+- EventQueue やスレッドを自前で管理したい場合は、`can_rpc::MbedCanInterface` と `CanRpcClient` / `CanRpcServer` を直接組み合わせて使える
 
 ## ディレクトリ
 
@@ -55,8 +53,6 @@ build/host/Debug/can_rpc_host_test
 ```
 
 ## サンプルのビルド
-
-`Step::CAN` を使用するため、robostep-libs-cpp (private) を `lib_deps` で `.pio/libdeps` に取得する。GitHub に SSH 鍵で接続できること。
 
 ```
 cd examples/add_client && pio run
