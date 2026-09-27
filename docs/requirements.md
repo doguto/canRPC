@@ -6,12 +6,13 @@ Mbed OS 上の Classic CAN で、型付き payload の RPC (Request / Response) 
 
 ## 構成
 
+- `Node` : CAN (`MbedCanInterface`)・`EventQueue`・dispatch スレッドをまとめて保持し、client / server を生成する Mbed 向けの簡易 API
 - `CanRpcClient<RequestPayload, ResponsePayload>`
 - `CanRpcServer<RequestPayload, ResponsePayload>`
 - `CanInterface` : CAN 下位層の抽象 (write / attach / detach)
   - `MbedCanInterface` : ピンとビットレートから内部で `mbed::RawCAN` を生成して使用する実装。受信割り込みを 1 つ登録し、内部で複数ハンドラ (既定 4 個、`BasicMbedCanInterface<N>` で変更可) に配信する
   - `host_test/mock_can.hpp` : ホストテスト用モック
-- 言語: C++14 以上 (ヘッダオンリー)
+- 言語: C++14 以上 (ヘッダオンリー)。`Node::client()` / `Node::server()` の利用は C++17 以上
 - 対象: Mbed OS 6 / PlatformIO
 
 ## 制約
@@ -69,7 +70,7 @@ void set_request_handler(Callback<ResponsePayload(const RequestPayload&)>);
 - client は、シーケンス番号・長さが一致しない response を破棄する
 - server は最後に処理したシーケンス番号と応答をキャッシュする。同一番号のリクエストを受信した場合は handler を呼ばず、保存した応答を再送する (at-least-once 対策)
 - 受信ハンドラ (ISR コンテキスト) は CAN ID の一致確認のみ行い、フレームを値渡しで `EventQueue` に投入する。処理と callback は `EventQueue` 側で実行する
-- `EventQueue` はコンストラクタで外部から注入する。スレッドはライブラリ内で生成しない
+- `EventQueue` はコンストラクタで外部から注入する。`CanRpcClient` / `CanRpcServer` はスレッドを生成しない (dispatch スレッドを生成するのは `Node` のみ)
 - `CanInterface::attach()` は複数登録可能とし、同一の CAN に client / server / 他のリスナーを同居できる
 
 ## スレッド規約

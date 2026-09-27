@@ -5,30 +5,29 @@
 // NUCLEO-F303K8: D10=PA_11(RD) / D2=PA_12(TD)
 #define CAN_RD_PIN PA_11
 #define CAN_TD_PIN PA_12
-#define EVENT_QUEUE_SIZE (2 * 1024)  // RAM 16KB のため縮小
 #define CAN_BITRATE 1000000
-
-// === グローバルオブジェクト ===
-can_rpc::MbedCanInterface can(CAN_RD_PIN, CAN_TD_PIN, CAN_BITRATE);
-events::EventQueue queue(EVENT_QUEUE_SIZE);
-can_rpc::CanRpcServer<AddRequest, AddResponse> add_server(
-    can,
-    queue,
-    can_rpc::ServerConfig{ADD_REQUEST_ID, ADD_RESPONSE_ID});
 
 // === 関数宣言 ===
 AddResponse handleAddRequest(const AddRequest &request);
+
+// === グローバルオブジェクト ===
+// CAN / EventQueue / dispatch スレッドは Node が保持する。
+// handler 内で printf するため dispatch スレッドの stack を広げる (QueueSize, StackSize)
+can_rpc::BasicNode<1024, 2048> node(CAN_RD_PIN, CAN_TD_PIN, CAN_BITRATE);
+auto add_server = node.server<AddRequest, AddResponse>(ADD_REQUEST_ID, ADD_RESPONSE_ID, handleAddRequest);
 
 int main()
 {
     printf("[SERVER] START\r\n");
 
-    add_server.set_request_handler(handleAddRequest);
-
-    queue.dispatch_forever();
+    // 処理は Node の dispatch スレッドで行われるため、main は待機するだけ
+    while (true)
+    {
+        ThisThread::sleep_for(1s);
+    }
 }
 
-// EventQueue の dispatch コンテキストで実行される
+// Node の dispatch スレッドで実行される
 AddResponse handleAddRequest(const AddRequest &request)
 {
     AddResponse response{};

@@ -4,6 +4,7 @@
 #include <string.h>
 
 #include <type_traits>
+#include <utility>
 
 #include "can_interface.hpp"
 #include "platform.hpp"
@@ -30,6 +31,11 @@ public:
     CanRpcServer(CanInterface& can, EventQueue& queue, const ServerConfig& config)
         : can_(can), queue_(queue), config_(config) {
         rx_handle_ = can_.attach([this](const CanFrame& frame) { on_rx(frame); });
+    }
+
+    CanRpcServer(CanInterface& can, EventQueue& queue, const ServerConfig& config, RequestHandler handler)
+        : CanRpcServer(can, queue, config) {
+        handler_ = std::move(handler);
     }
 
     ~CanRpcServer() {

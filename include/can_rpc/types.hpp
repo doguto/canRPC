@@ -55,9 +55,9 @@ private:
 struct ClientConfig {
     uint32_t request_id;
     uint32_t response_id;
-    std::chrono::milliseconds timeout;  // 1 回の送信あたりの応答待ち時間
-    uint8_t max_retries;                // 初回送信を除く再送回数
-    uint8_t initial_seq = 0;            // 最初の call に使用するシーケンス番号
+    std::chrono::milliseconds timeout{100};  // 1 回の送信あたりの応答待ち時間
+    uint8_t max_retries = 3;                 // 初回送信を除く再送回数
+    uint8_t initial_seq = 0;                 // 最初の call に使用するシーケンス番号
 };
 
 struct ServerConfig {
