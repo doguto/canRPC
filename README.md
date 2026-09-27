@@ -13,8 +13,8 @@ Mbed OS 上の Classic CAN で、型付き payload の RPC を行うヘッダオ
 struct AddRequest  { int16_t a; int16_t b; };
 struct AddResponse { int32_t sum; };
 
-Step::CAN can(PB_8, PB_9, 1000000);
-can_rpc::MbedCanInterface<Step::CAN> can_interface(can);
+mbed::RawCAN can(PB_8, PB_9, 1000000);  // 受信割り込み内で read するため mbed::RawCAN を使う
+can_rpc::MbedCanInterface can_interface(can);
 events::EventQueue queue(4 * 1024);
 
 // client
@@ -55,8 +55,6 @@ build/host/Debug/can_rpc_host_test
 ```
 
 ## サンプルのビルド
-
-`Step::CAN` を使用するため、robostep-libs-cpp (private) を `lib_deps` で `.pio/libdeps` に取得する。GitHub に SSH 鍵で接続できること。
 
 ```
 cd examples/add_client && pio run

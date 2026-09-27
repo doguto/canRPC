@@ -1,5 +1,4 @@
 #include "mbed.h"
-#include "can.hpp"  // Step::CAN (robostep-libs-cpp)
 #include "can_rpc/can_rpc.hpp"
 #include "can_rpc/mbed_can_interface.hpp"
 #include "add_payload.hpp"
@@ -17,8 +16,8 @@
 #define RPC_MAX_RETRIES 3
 
 // === グローバルオブジェクト ===
-Step::CAN can(CAN_RD_PIN, CAN_TD_PIN, CAN_BITRATE);
-can_rpc::MbedCanInterface<Step::CAN> can_interface(can);
+mbed::RawCAN can(CAN_RD_PIN, CAN_TD_PIN, CAN_BITRATE);
+can_rpc::MbedCanInterface can_interface(can);
 static unsigned char queue_buffer[EVENT_QUEUE_SIZE];
 static uint64_t dispatch_stack[DISPATCH_STACK_SIZE / sizeof(uint64_t)];  // 8 byte アラインを確保
 events::EventQueue queue(EVENT_QUEUE_SIZE, queue_buffer);

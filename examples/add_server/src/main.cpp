@@ -1,5 +1,4 @@
 #include "mbed.h"
-#include "can.hpp"  // Step::CAN (robostep-libs-cpp)
 #include "can_rpc/can_rpc.hpp"
 #include "can_rpc/mbed_can_interface.hpp"
 #include "add_payload.hpp"
@@ -11,8 +10,8 @@
 #define CAN_BITRATE 1000000
 
 // === グローバルオブジェクト ===
-Step::CAN can(CAN_RD_PIN, CAN_TD_PIN, CAN_BITRATE);
-can_rpc::MbedCanInterface<Step::CAN> can_interface(can);
+mbed::RawCAN can(CAN_RD_PIN, CAN_TD_PIN, CAN_BITRATE);
+can_rpc::MbedCanInterface can_interface(can);
 events::EventQueue queue(EVENT_QUEUE_SIZE);
 can_rpc::CanRpcServer<AddRequest, AddResponse> add_server(
     can_interface,
