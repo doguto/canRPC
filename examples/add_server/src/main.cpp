@@ -1,6 +1,5 @@
 #include "mbed.h"
 #include "can_rpc/can_rpc.hpp"
-#include "can_rpc/mbed_can_interface.hpp"
 #include "add_payload.hpp"
 
 // NUCLEO-F303K8: D10=PA_11(RD) / D2=PA_12(TD)
@@ -10,11 +9,10 @@
 #define CAN_BITRATE 1000000
 
 // === グローバルオブジェクト ===
-mbed::RawCAN can(CAN_RD_PIN, CAN_TD_PIN, CAN_BITRATE);
-can_rpc::MbedCanInterface can_interface(can);
+can_rpc::MbedCanInterface can(CAN_RD_PIN, CAN_TD_PIN, CAN_BITRATE);
 events::EventQueue queue(EVENT_QUEUE_SIZE);
 can_rpc::CanRpcServer<AddRequest, AddResponse> add_server(
-    can_interface,
+    can,
     queue,
     can_rpc::ServerConfig{ADD_REQUEST_ID, ADD_RESPONSE_ID});
 

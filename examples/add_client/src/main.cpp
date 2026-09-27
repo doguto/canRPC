@@ -1,6 +1,5 @@
 #include "mbed.h"
 #include "can_rpc/can_rpc.hpp"
-#include "can_rpc/mbed_can_interface.hpp"
 #include "add_payload.hpp"
 
 // NUCLEO-F303K8: D10=PA_11(RD) / D2=PA_12(TD)
@@ -16,14 +15,13 @@
 #define RPC_MAX_RETRIES 3
 
 // === グローバルオブジェクト ===
-mbed::RawCAN can(CAN_RD_PIN, CAN_TD_PIN, CAN_BITRATE);
-can_rpc::MbedCanInterface can_interface(can);
+can_rpc::MbedCanInterface can(CAN_RD_PIN, CAN_TD_PIN, CAN_BITRATE);
 static unsigned char queue_buffer[EVENT_QUEUE_SIZE];
 static uint64_t dispatch_stack[DISPATCH_STACK_SIZE / sizeof(uint64_t)];  // 8 byte アラインを確保
 events::EventQueue queue(EVENT_QUEUE_SIZE, queue_buffer);
 Thread dispatch_thread(osPriorityNormal, DISPATCH_STACK_SIZE, reinterpret_cast<unsigned char *>(dispatch_stack));
 can_rpc::CanRpcClient<AddRequest, AddResponse> add_client(
-    can_interface,
+    can,
     queue,
     can_rpc::ClientConfig{ADD_REQUEST_ID, ADD_RESPONSE_ID, RPC_TIMEOUT, RPC_MAX_RETRIES});
 

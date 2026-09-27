@@ -8,22 +8,20 @@ Mbed OS 上の Classic CAN で、型付き payload の RPC を行うヘッダオ
 
 ```cpp
 #include "can_rpc/can_rpc.hpp"
-#include "can_rpc/mbed_can_interface.hpp"
 
 struct AddRequest  { int16_t a; int16_t b; };
 struct AddResponse { int32_t sum; };
 
-mbed::RawCAN can(PB_8, PB_9, 1000000);  // 受信割り込み内で read するため mbed::RawCAN を使う
-can_rpc::MbedCanInterface can_interface(can);
+can_rpc::MbedCanInterface can(PB_8, PB_9, 1000000);  // rd, td, bitrate
 events::EventQueue queue(4 * 1024);
 
 // client
 can_rpc::CanRpcClient<AddRequest, AddResponse> client(
-    can_interface, queue, can_rpc::ClientConfig{0x300, 0x301, 100ms, 3});
+    can, queue, can_rpc::ClientConfig{0x300, 0x301, 100ms, 3});
 
 // server
 can_rpc::CanRpcServer<AddRequest, AddResponse> server(
-    can_interface, queue, can_rpc::ServerConfig{0x300, 0x301});
+    can, queue, can_rpc::ServerConfig{0x300, 0x301});
 server.set_request_handler([](const AddRequest& r) { return AddResponse{r.a + r.b}; });
 
 // dispatch は専用スレッドで回す

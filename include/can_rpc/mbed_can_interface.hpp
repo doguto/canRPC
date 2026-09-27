@@ -9,19 +9,20 @@
 
 namespace can_rpc {
 
-// mbed::RawCAN を直接使用する CanInterface の実装。
+// mbed の CAN を直接使用する CanInterface の実装。
+//
+//   can_rpc::MbedCanInterface can(PA_11, PA_12, 1000000);  // rd, td, bitrate
 //
 // mbed::CAN の attach() は 1 スロットのため、受信割り込みを 1 つだけ登録し、
 // 本クラス内で複数の受信ハンドラ (最大 MaxHandlers 個) へ配信する。
 //
-// 受信割り込み内で read() する必要があるため mbed::RawCAN (mutex 無し) を使用する。
+// 受信割り込み内で read() する必要があるため、内部で mbed::RawCAN (mutex 無し) を保持する。
 // mbed::CAN の read() は mutex を取るため ISR から呼べない。
 // RawCAN はスレッドセーフではないため、write() は本クラスの mutex で直列化する。
-// 同じ RawCAN インスタンスを本クラス以外から操作しないこと。
 template <size_t MaxHandlers = 4>
 class BasicMbedCanInterface : public CanInterface {
 public:
-    explicit BasicMbedCanInterface(mbed::RawCAN& can) : can_(can) {
+    BasicMbedCanInterface(PinName rd, PinName td, int hz) : can_(rd, td, hz) {
         can_.attach(mbed::callback(this, &BasicMbedCanInterface::on_rx_irq), mbed::CAN::RxIrq);
     }
 
@@ -29,6 +30,10 @@ public:
 
     BasicMbedCanInterface(const BasicMbedCanInterface&) = delete;
     BasicMbedCanInterface& operator=(const BasicMbedCanInterface&) = delete;
+
+    // フィルタやモード設定など、RawCAN を直接操作したい場合に使う。
+    // read() / attach() は本クラスが使用するため呼ばないこと。
+    mbed::RawCAN& raw() { return can_; }
 
     // スレッドコンテキストから呼ぶこと (ISR 不可)
     bool write(const CanFrame& frame) override {
@@ -83,7 +88,7 @@ private:
         }
     }
 
-    mbed::RawCAN& can_;
+    mbed::RawCAN can_;
     rtos::Mutex write_mutex_;
     RxHandler handlers_[MaxHandlers];
 };

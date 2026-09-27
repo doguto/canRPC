@@ -9,7 +9,7 @@ Mbed OS 上の Classic CAN で、型付き payload の RPC (Request / Response) 
 - `CanRpcClient<RequestPayload, ResponsePayload>`
 - `CanRpcServer<RequestPayload, ResponsePayload>`
 - `CanInterface` : CAN 下位層の抽象 (write / attach / detach)
-  - `MbedCanInterface` : `mbed::RawCAN` を直接使用する実装。受信割り込みを 1 つ登録し、内部で複数ハンドラ (既定 4 個、`BasicMbedCanInterface<N>` で変更可) に配信する
+  - `MbedCanInterface` : ピンとビットレートから内部で `mbed::RawCAN` を生成して使用する実装。受信割り込みを 1 つ登録し、内部で複数ハンドラ (既定 4 個、`BasicMbedCanInterface<N>` で変更可) に配信する
   - `host_test/mock_can.hpp` : ホストテスト用モック
 - 言語: C++14 以上 (ヘッダオンリー)
 - 対象: Mbed OS 6 / PlatformIO
